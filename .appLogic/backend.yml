@@ -1,5 +1,6 @@
 modules:
   rssReader: # Step 1
+    location: src/backend/modules/articles/rssReader.js
     event_order:
       - pull_rss_feed
       - parse_rss_feed:
@@ -16,7 +17,6 @@ modules:
             - embedded media
       - store_feeds
       - create_articles_table
-    location: src/backend/modules/articles/rssReader.js
     triggers:
       - articles_fetch: 
         with:
@@ -25,6 +25,18 @@ modules:
             - title
             - pubDate
   articlesFetch: # Step 2
+    location: src/backend/modules/articles/articlesFetch.js
+    implementation:
+      features:
+        - Source-specific table handling
+        - Bulk article processing
+        - Transaction per source
+        - Error handling per source
+      database:
+        operations:
+          - UPSERT articles using url as key
+          - Transaction management
+          - Connection pooling
     tasks:
       - pull articles from Sources
       - store articles:
@@ -43,7 +55,7 @@ modules:
           - articles_table:
             - url
             - row_id
-  articles_scrape: # Step 3
+  articles_scrape: # Step 3 (Not implemented yet)
     tasks:
       - check scrape_check flag
       - scrape articles only if scrape_check = 0

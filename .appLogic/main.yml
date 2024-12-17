@@ -8,22 +8,29 @@ project:
 
 directory_structure:
   src/:
+    index.js: "Main worker entry point with 60-min loop"
     backend/:
+    - backend.yml: "Backend logic"
       modules/:
         articles/:
-          - rss_reader.js: "RSS feed fetching and processing"
+          - rssReader.js: "RSS feed fetching and processing"
+          - articlesFetch.js: "Article data processing and storage"
       utils/:
         - dbCon.js: "PostgreSQL connection pooling"
         - logger.js: "Winston logger configuration"
-      types/:
-        - types.ts: "Global type definitions"
     frontend/:
-      # To be implemented
+      # todo: add frontend
+
+database:
+  type: PostgreSQL
+  connection:
+    method: connection pooling
+    max_clients: 10
+    idle_timeout: 30000ms # 30 seconds
+  schema: ./db.sql
 
 configuration:
   environment:
-    - DB_URL: "PostgreSQL database URL"
-
-database: ./db.sql
-frontend: ./frontend.yml
-backend: ./backend.yml
+    required:
+      - DB_URL: "PostgreSQL database connection string"
+      - DEPLOYMENT_ENV: "development/production"
