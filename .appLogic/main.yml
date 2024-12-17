@@ -7,12 +7,23 @@ project:
     base_image: node:alpine
 
 directory_structure:
-  src/: 
-    index.ts: "Worker entry point"
-    backend/types/types.ts: "Global type definitions"
-    backend/models/:
+  src/:
+    backend/:
+      modules/:
+        articles/:
+          - rss_reader.js: "RSS feed fetching and processing"
+      utils/:
+        - dbCon.js: "PostgreSQL connection pooling"
+        - logger.js: "Winston logger configuration"
+      types/:
+        - types.ts: "Global type definitions"
+    frontend/:
+      # To be implemented
 
+configuration:
+  environment:
+    - DB_URL: "PostgreSQL database URL"
 
-idatabase: ./db.yml
+database: ./db.sql
 frontend: ./frontend.yml
 backend: ./backend.yml

@@ -1,49 +1,44 @@
-// Main worker entry point for Some News Found
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import rssReader from './backend/modules/articles/rssReader.js';
 import { createLogger } from './backend/utils/logger.js';
+import { initializeDatabase } from './backend/utils/dbCon.js';
 
-// Setup logger
 const logger = createLogger('worker');
 
-// Get current directory
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+// Feed URLs
+const feedUrls = [
+    'https://tnc.news/feed/',
+    'https://www.cbc.ca/cmlink/rss-topstories'
+];
 
-// Initialize database connection
-async function initializeDatabase() {
-    try {
-        // TODO: Implement Cloudflare D1 database connection
-        logger.info('Database initialization started');
-        return true;
-    } catch (error) {
-        logger.error('Database initialization failed:', error);
-        return false;
-    }
-}
+// Sleep function (returns a promise that resolves after ms milliseconds)
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// Main worker function
-async function startWorker() {
+async function feedWorker() {
     try {
         logger.info('Starting RSS feed worker');
         
         // Initialize database
-        const dbInitialized = await initializeDatabase();
-        if (!dbInitialized) {
-            throw new Error('Failed to initialize database');
-        }
+        await initializeDatabase();
+        logger.info('Database initialized');
 
-        // TODO: Implement RSS feed processing logic
-        // 1. Pull RSS feeds
-        // 2. Parse feeds
-        // 3. Store in database
+        // Initialize and run RSS reader
+        await rssReader.initialize(feedUrls);
+        await rssReader.processFeedSources();
         
-        logger.info('Worker started successfully');
+        logger.info('Feed processing completed successfully');
     } catch (error) {
-        logger.error('Worker failed to start:', error);
-        process.exit(1);
+        logger.error('Worker failed:', error.message);
     }
 }
 
-// Start the worker
-startWorker();
+// Run worker in a loop with 60-minute intervals
+async function runWorkerLoop() {
+    while (true) {
+        await feedWorker();
+        logger.info('Worker sleeping for 60 minutes...');
+        await sleep(60 * 60 * 1000); // 60 minutes in milliseconds
+    }
+}
+
+// Start the worker loop
+runWorkerLoop();

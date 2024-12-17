@@ -1,5 +1,5 @@
 modules:
-  rss_read: # Step 1
+  rssReader: # Step 1
     event_order:
       - pull_rss_feed
       - parse_rss_feed:
@@ -10,28 +10,50 @@ modules:
           - url
           - title
           - pubDate
+          - content:encoded: # RSS feed may contain full article content
+            - CDATA HTML content
+            - images
+            - embedded media
       - store_feeds
       - create_articles_table
-    location: src/backend/modules/rss_read.ts
+    location: src/backend/modules/articles/rssReader.js
     triggers:
       - articles_fetch: 
         with:
-          - source urls 
-          - articles_table
-  articles_fetch: # Step 2
+          - articles_table:
+            - url
+            - title
+            - pubDate
+  articlesFetch: # Step 2
     tasks:
       - pull articles from Sources
-      - 
       - store articles:
         - url
         - title
         - date_added
+      - check if article scrape needed:
+        - if content:encoded exists in RSS:
+          - extract and store content
+          - skip scraping step
+        - else:
+          - queue for scraping
+    triggers:
+      - scrape_articles:
+        with:
+          - articles_table:
+            - url
+            - row_id
   articles_scrape: # Step 3
     tasks:
-      - scrape articles
+      - check scrape_check flag
+      - scrape articles only if scrape_check = 0
       - store content in articles_table
     tools:
       - jinaai API call
     retention:
       articles_days: 30
       events_days: 90
+    optimization:
+      skip_conditions:
+        - content:encoded present in RSS feed
+        - content already extracted during articlesFetch
