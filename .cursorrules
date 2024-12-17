@@ -1,0 +1,24 @@
+The .appLogic files will be used to keep track of the project structure as we build it.
+  - Keep the .appLogic fresh in your mind as you write the code.
+  - Read this as needed but do not edit it.
+  - follow this as closely as possible.
+
+Coding style:
+  - write one line comments to make it easy for me to read your code.
+  - keep the code clean and readable.
+  - keep the code minimal and to the point.
+  - setup good logging along the way.
+  - use good variable names.
+  - use easy to understand function names.
+
+Project structure:
+  - split into /src/frontend and /src/backend
+  - packaged in a docker container.
+  - use docker compose to run the container.
+
+Backend:
+  - uses NodeJS
+
+Frontend:
+  - uses tailwindcss
+  - uses javascript

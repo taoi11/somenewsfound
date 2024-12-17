@@ -1,0 +1,37 @@
+modules:
+  rss_read: # Step 1
+    event_order:
+      - pull_rss_feed
+      - parse_rss_feed:
+        - channels:
+          - url
+          - title
+        - articles:
+          - url
+          - title
+          - pubDate
+      - store_feeds
+      - create_articles_table
+    location: src/backend/modules/rss_read.ts
+    triggers:
+      - articles_fetch: 
+        with:
+          - source urls 
+          - articles_table
+  articles_fetch: # Step 2
+    tasks:
+      - pull articles from Sources
+      - 
+      - store articles:
+        - url
+        - title
+        - date_added
+  articles_scrape: # Step 3
+    tasks:
+      - scrape articles
+      - store content in articles_table
+    tools:
+      - jinaai API call
+    retention:
+      articles_days: 30
+      events_days: 90

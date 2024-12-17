@@ -1,0 +1,18 @@
+# project_structure.yml
+
+project:
+  name: Some News Found
+  deployment:
+    platform: Docker Container
+    base_image: node:alpine
+
+directory_structure:
+  src/: 
+    index.ts: "Worker entry point"
+    backend/types/types.ts: "Global type definitions"
+    backend/models/:
+
+
+idatabase: ./db.yml
+frontend: ./frontend.yml
+backend: ./backend.yml
