@@ -6,7 +6,6 @@ const logger = createLogger('articles-fetch');
 class ArticlesFetch {
     constructor() {
         this.sources = [];
-        this.processedArticles = new Map(); // Track processed articles by table
     }
 
     /**
@@ -16,7 +15,6 @@ class ArticlesFetch {
     async initialize(sources) {
         try {
             this.sources = sources;
-            this.processedArticles.clear();
             logger.info(`Initialized ArticlesFetch with ${sources.length} sources`);
             return true;
         } catch (error) {
@@ -35,40 +33,23 @@ class ArticlesFetch {
         try {
             await client.query('BEGIN');
 
-            // Track articles for this table
-            if (!this.processedArticles.has(source.articles_table)) {
-                this.processedArticles.set(source.articles_table, []);
-            }
-            const tableArticles = this.processedArticles.get(source.articles_table);
-
             // Insert articles into source-specific articles table
             const articleQuery = `
-                INSERT INTO ${source.articles_table} (url, title, date_added)
-                VALUES ($1, $2, $3)
+                INSERT INTO ${source.articles_table} 
+                (url, title, date_added, scrape_check)
+                VALUES ($1, $2, $3, 0)
                 ON CONFLICT (url) DO UPDATE
                 SET title = EXCLUDED.title,
-                    date_added = EXCLUDED.date_added
+                    date_added = EXCLUDED.date_added,
+                    scrape_check = 0
                 RETURNING id, title`;
 
             for (const article of articles) {
-                const result = await client.query(articleQuery, [
+                await client.query(articleQuery, [
                     article.url,
                     article.title,
                     article.date_added
                 ]);
-                
-                // Add to processed articles list
-                if (result.rows[0]) {
-                    tableArticles.push({
-                        id: result.rows[0].id,
-                        url: article.url,
-                        title: result.rows[0].title,
-                        contentEncoded: article.contentEncoded,
-                        content: article.content,
-                        categories: article.categories
-                    });
-                }
-                
                 logger.debug(`Processed article: ${article.title} for ${source.channel_name}`);
             }
 
@@ -84,18 +65,7 @@ class ArticlesFetch {
     }
 
     /**
-     * Get processed articles data
-     * @returns {Array} Array of feed data with processed articles
-     */
-    getProcessedFeeds() {
-        return Array.from(this.processedArticles.entries()).map(([articles_table, articles]) => ({
-            source: { articles_table },
-            articles
-        }));
-    }
-
-    /**
-     * Main process to fetch and store articles
+     * Process feeds data
      * @param {Array} feedData - Array of feed data objects
      */
     async processFeeds(feedData) {
@@ -106,12 +76,62 @@ class ArticlesFetch {
                 await this.processArticles(feed.source, feed.articles);
             }
 
-            const processedFeeds = this.getProcessedFeeds();
             logger.info('All feeds processed successfully');
-            return processedFeeds;
         } catch (error) {
             logger.error('Failed to process feeds:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Process articles from a table
+     * @param {string} tableName - Name of the articles table
+     */
+    async processTable(tableName) {
+        try {
+            logger.debug(`Processing articles from table: ${tableName}`);
+            const articles = await this.getUnprocessedArticles(tableName);
+            
+            if (articles.length === 0) {
+                logger.debug(`No unprocessed articles in ${tableName}`);
+                return;
+            }
+
+            logger.info(`Found ${articles.length} unprocessed articles in ${tableName}`);
+            
+            // Process each article
+            for (const article of articles) {
+                try {
+                    await this.processArticle(article, tableName);
+                } catch (error) {
+                    logger.error(`Error processing article in ${tableName}:`, error);
+                }
+            }
+
+            logger.debug(`Completed processing articles from ${tableName}`);
+        } catch (error) {
+            logger.error(`Error processing table ${tableName}:`, error);
+        }
+    }
+
+    /**
+     * Process all article tables
+     */
+    async processAllTables() {
+        try {
+            logger.info('Starting article fetch processing');
+            
+            const tables = await this.getArticleTables();
+            logger.debug(`Found ${tables.length} article tables`);
+            
+            // Process each table
+            for (const table of tables) {
+                await this.processTable(table);
+            }
+
+            logger.info('Completed article fetch processing');
+        } catch (error) {
+            logger.error('Error processing tables:', error);
         }
     }
 }

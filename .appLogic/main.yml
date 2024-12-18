@@ -14,9 +14,10 @@ directory_structure:
         articles/:
           rssReader.js: "RSS feed fetching and processing"
           articlesFetch.js: "Article data processing and storage"
-          articlesScraper.js: "Content scraping and processing"
+          articlesScrape.js: "Content scraping and processing"
           scrapers/:
             trueNorth.js: "True North news scraper implementation"
+            cbc.js: "CBC news scraper implementation"
       utils/:
         dbCon.js: "PostgreSQL connection pooling"
         logger.js: "Winston logger configuration"
@@ -40,3 +41,9 @@ configuration:
       OLLAMA_HOST: "Ollama API endpoint URL"
       OLLAMA_HTML_READER: "Model name for HTML to markdown conversion"
       OLLAMA_HTML_READER_NUM_CTX: "Context size for HTML processing"
+  logging:
+    levels:
+      error: "Critical failures and exceptions"
+      warn: "Non-critical issues needing attention"
+      info: "High-level process starts/completions"
+      debug: "Detailed progress tracking"

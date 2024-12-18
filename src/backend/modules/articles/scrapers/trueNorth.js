@@ -30,21 +30,21 @@ class trueNorthNewsScraper {
      */
     async scrape(url, article) {
         try {
-            logger.info(`Processing article: ${article.title}`);
+            logger.debug(`Processing article: ${article.title}`);
 
             // Check for special content types
             if (article.categories && this.isVideoContent(article.categories)) {
-                logger.info(`Video content found: ${article.title}`);
+                logger.debug(`Video content found: ${article.title}`);
                 return 'Video Content';
             }
 
             // For non-video content, return the entire content:encoded content
             if (article.contentEncoded) {
-                logger.info(`Successfully extracted content from: ${article.title}`);
+                logger.debug(`Using content:encoded for: ${article.title}`);
                 return article.contentEncoded;
             }
 
-            logger.info(`No content found for article: ${article.title}, checking raw content`);
+            logger.debug(`No content found for article: ${article.title}, checking raw content`);
             
             // If no contentEncoded, try using raw content if available
             if (article.content) {

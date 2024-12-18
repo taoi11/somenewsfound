@@ -1,4 +1,5 @@
 import rssReader from './backend/modules/articles/rssReader.js';
+import articlesScraper from './backend/modules/articles/articlesScrape.js';
 import { createLogger } from './backend/utils/logger.js';
 import { initializeDatabase } from './backend/utils/dbCon.js';
 
@@ -25,7 +26,11 @@ async function feedWorker() {
         await rssReader.initialize(feedUrls);
         await rssReader.processFeedSources();
         
-        logger.info('Feed processing completed successfully');
+        logger.info('Feed processing completed');
+
+        // Process articles content
+        await articlesScraper.processAllTables();
+        logger.info('Article processing completed');
     } catch (error) {
         logger.error('Worker failed:', error.message);
     }

@@ -2,16 +2,12 @@ version: '3.8'
 
 services:
   app:
-    build: 
-      context: .
-      dockerfile: Dockerfile
-    volumes:
-      - .:/app
-      - /app/node_modules
-      - ./logs:/app/logs
-    ports:
-      - "3000:3000"
+    build: .
+    container_name: somenewsfound-app
     environment:
-      - DEPLOYMENT_ENV=${DEPLOYMENT_ENV:-development}
-    command: npm run ${NODE_ENV:-dev}
-    restart: unless-stopped 
+      - NODE_ENV=production
+      - DB_URL=postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/somenewsfound
+      - DEPLOYMENT_ENV=production
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped

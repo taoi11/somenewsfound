@@ -55,10 +55,25 @@ modules:
           - articles_table:
             - url
             - row_id
-  articles_scrape: # Step 3
+  articlesScrape: # Step 3
+    location: src/backend/modules/articles/articlesScrape.js
+    scrapers:
+      trueNorth:
+        features:
+          - Video/Podcast detection
+          - Content:encoded extraction
+          - Raw content fallback
+      cbc:
+        features:
+          - Custom user agent
+          - URL cleaning
+          - Main content extraction:
+            - main tag parsing
+            - detailContent div parsing
+            - story-content fallback
     tasks:
       - check scrape_check flag
-      - scrape articles only if scrape_check = 0
+      - scrape articles only if content is NULL
       - store content in articles_table
     content_processing:
       ollama:
@@ -71,8 +86,8 @@ modules:
       events_days: 90
     optimization:
       skip_conditions:
-        - content:encoded present in RSS feed
-        - content already extracted during articlesFetch
+        - content already present
+        - video/podcast content
 
 utils:
   logger:
@@ -80,7 +95,11 @@ utils:
     implementation: winston
     features:
       - Timestamp
-      - Log levels
+      - Log levels:
+          error: "Critical failures and exceptions"
+          warn: "Non-critical issues needing attention"
+          info: "High-level process starts/completions"
+          debug: "Detailed progress tracking"
       - Module-specific loggers
   
   database:

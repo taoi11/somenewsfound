@@ -1,22 +1,26 @@
 FROM node:alpine
 
-# Create app directory
+# Create app directory and set working directory
 WORKDIR /app
 
-# Install app dependencies
+# Create a non-root user
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install production dependencies only
+RUN npm ci --only=production
 
-# Bundle app source
+# Copy application code
 COPY . .
 
-# Create log directories
-RUN mkdir -p logs/development logs/production
+# Create log directories and set permissions
+RUN mkdir -p logs/development logs/production && \
+    chown -R appuser:appgroup /app
 
-# Expose port
-EXPOSE 3000
+# Switch to non-root user
+USER appuser
 
 # Start the application
 CMD ["npm", "start"] 

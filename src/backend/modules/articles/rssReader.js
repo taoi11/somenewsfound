@@ -1,8 +1,6 @@
 import Parser from 'rss-parser';
 import { createLogger } from '../../utils/logger.js';
 import { pool } from '../../utils/dbCon.js';
-import articlesFetch from './articlesFetch.js';
-import articlesScraper from './articlesScraper.js';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -29,7 +27,6 @@ const parser = new Parser({
 class RSSReader {
     constructor() {
         this.sourceUrls = [];
-        this.processedFeeds = [];
     }
 
     /**
@@ -40,7 +37,6 @@ class RSSReader {
         try {
             logger.info(`Initializing RSS reader with ${urls.length} sources`);
             this.sourceUrls = urls;
-            this.processedFeeds = [];
             
             // Test database connection and create sources table
             await this.testDatabaseConnection();
@@ -63,14 +59,13 @@ class RSSReader {
             // Create sources table if not exists
             await client.query(`
                 CREATE TABLE IF NOT EXISTS sources (
-                    id BIGSERIAL PRIMARY KEY,
-                    url TEXT NOT NULL UNIQUE,
-                    channel_name TEXT NOT NULL,
-                    articles_table TEXT NOT NULL UNIQUE
+                    id bigint primary key generated always as identity,
+                    url text not null unique,
+                    channel_name text not null unique,
+                    articles_table text not null unique
                 )`);
-
             await client.query('COMMIT');
-            logger.info('Database connection verified and sources table created');
+            logger.info('Database connection verified and tables created');
             return true;
         } catch (error) {
             await client.query('ROLLBACK');
@@ -150,7 +145,7 @@ class RSSReader {
     }
 
     /**
-     * Stores feed source in the database
+     * Stores feed source and articles in the database
      * @param {Object} feedData - Parsed feed data
      */
     async storeFeedSource(feedData) {
@@ -161,19 +156,14 @@ class RSSReader {
             // Create articles table for this source if it doesn't exist
             const createArticlesTableQuery = `
                 CREATE TABLE IF NOT EXISTS ${feedData.source.articles_table} (
-                    id BIGSERIAL PRIMARY KEY,
-                    url TEXT NOT NULL UNIQUE,
-                    title TEXT NOT NULL,
-                    date_added TIMESTAMP NOT NULL,
-                    categories TEXT[],
-                    content TEXT,
-                    content_encoded TEXT,
-                    processed BOOLEAN DEFAULT FALSE,
-                    processed_at TIMESTAMP,
-                    error TEXT,
-                    markdown TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    id bigint primary key generated always as identity,
+                    title text not null,
+                    url text not null unique,
+                    content text,
+                    summary text,
+                    date_added date not null,
+                    scrape_check integer,
+                    topic_id bigint references news_topics (id)
                 )`;
             await client.query(createArticlesTableQuery);
 
@@ -185,17 +175,30 @@ class RSSReader {
                 SET channel_name = EXCLUDED.channel_name,
                     articles_table = EXCLUDED.articles_table
                 RETURNING id`;
-            const sourceResult = await client.query(sourceQuery, [
+            await client.query(sourceQuery, [
                 feedData.source.url,
                 feedData.source.channel_name,
                 feedData.source.articles_table
             ]);
 
+            // Insert articles
+            for (const article of feedData.articles) {
+                const articleQuery = `
+                    INSERT INTO ${feedData.source.articles_table}
+                    (url, title, date_added)
+                    VALUES ($1, $2, $3)
+                    ON CONFLICT (url) DO UPDATE
+                    SET title = EXCLUDED.title,
+                        date_added = EXCLUDED.date_added`;
+                await client.query(articleQuery, [
+                    article.url,
+                    article.title,
+                    article.date_added
+                ]);
+            }
+
             await client.query('COMMIT');
-            logger.info(`Source and articles table stored successfully: ${feedData.source.channel_name}`);
-            
-            // Add to processed feeds for articlesFetch
-            this.processedFeeds.push(feedData);
+            logger.info(`Successfully stored ${feedData.articles.length} articles from ${feedData.source.channel_name}`);
         } catch (error) {
             await client.query('ROLLBACK');
             logger.error('Failed to store feed source:', error);
@@ -207,8 +210,7 @@ class RSSReader {
 
     /**
      * Process RSS feed content
-     * @param {string} url - Article URL
-     * @returns {Promise<string>} Article content
+     * @returns {Promise<void>}
      */
     async processFeedSources() {
         try {
@@ -218,28 +220,68 @@ class RSSReader {
 
             logger.info(`Processing ${this.sourceUrls.length} RSS sources`);
             
-            // Clear processed feeds array
-            this.processedFeeds = [];
-            
             // Process each feed
             for (const url of this.sourceUrls) {
                 const feedData = await this.pullAndParseFeed(url);
                 await this.storeFeedSource(feedData);
             }
 
-            // Initialize and run articlesFetch with processed feeds
-            await articlesFetch.initialize(this.processedFeeds.map(feed => feed.source));
-            const processedArticles = await articlesFetch.processFeeds(this.processedFeeds);
-
-            // Process articles content if any new/updated articles
-            if (processedArticles.length > 0) {
-                await articlesScraper.processFeeds(processedArticles);
-            }
-
             logger.info('RSS processing completed successfully');
         } catch (error) {
             logger.error('RSS processing failed:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Process a single feed
+     * @param {Object} feed - Feed configuration
+     */
+    async processFeed(feed) {
+        try {
+            logger.debug(`Processing feed: ${feed.name}`);
+            const feedData = await this.fetchFeed(feed.url);
+            
+            if (!feedData || !feedData.items) {
+                logger.warn(`No items found in feed: ${feed.name}`);
+                return;
+            }
+
+            logger.debug(`Found ${feedData.items.length} items in feed: ${feed.name}`);
+            
+            // Process each item
+            for (const item of feedData.items) {
+                try {
+                    await this.processItem(item, feed);
+                } catch (error) {
+                    logger.error(`Error processing item in feed ${feed.name}:`, error);
+                }
+            }
+
+            logger.debug(`Completed processing feed: ${feed.name}`);
+        } catch (error) {
+            logger.error(`Error processing feed ${feed.name}:`, error);
+        }
+    }
+
+    /**
+     * Process all feeds
+     */
+    async processAllFeeds() {
+        try {
+            logger.info('Starting RSS feed processing');
+            
+            const feeds = await this.getFeeds();
+            logger.debug(`Found ${feeds.length} feeds to process`);
+            
+            // Process each feed
+            for (const feed of feeds) {
+                await this.processFeed(feed);
+            }
+
+            logger.info('Completed RSS feed processing');
+        } catch (error) {
+            logger.error('Error processing feeds:', error);
         }
     }
 }
