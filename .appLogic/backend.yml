@@ -55,13 +55,17 @@ modules:
           - articles_table:
             - url
             - row_id
-  articles_scrape: # Step 3 (Not implemented yet)
+  articles_scrape: # Step 3
     tasks:
       - check scrape_check flag
       - scrape articles only if scrape_check = 0
       - store content in articles_table
-    tools:
-      - jinaai API call
+    content_processing:
+      ollama:
+        endpoint: /api/chat
+        model: reader-lm:1.5b-fp16
+        context_size: 65536
+        fallback: "Store original HTML if conversion fails"
     retention:
       articles_days: 30
       events_days: 90
@@ -69,3 +73,38 @@ modules:
       skip_conditions:
         - content:encoded present in RSS feed
         - content already extracted during articlesFetch
+
+utils:
+  logger:
+    location: src/backend/utils/logger.js
+    implementation: winston
+    features:
+      - Timestamp
+      - Log levels
+      - Module-specific loggers
+  
+  database:
+    location: src/backend/utils/dbCon.js
+    implementation: pg
+    features:
+      - Connection pooling
+      - Transaction support
+      - Parameterized queries
+  
+  ollama:
+    location: src/backend/utils/ollama.js
+    implementation: direct-api
+    features:
+      - Chat API integration
+      - Error handling with fallback
+      - Request/Response logging
+    endpoints:
+      chat:
+        method: POST
+        path: /api/chat
+        request:
+          - model
+          - messages
+          - options
+        response:
+          - message.content

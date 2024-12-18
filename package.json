@@ -9,10 +9,11 @@
     "dev": "nodemon src/index.js"
   },
   "dependencies": {
-    "winston": "^3.11.0",
-    "rss-parser": "^3.13.0",
     "dotenv": "^16.3.1",
-    "pg": "^8.11.3"
+    "ollama": "^0.5.11",
+    "pg": "^8.13.1",
+    "rss-parser": "^3.13.0",
+    "winston": "^3.11.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

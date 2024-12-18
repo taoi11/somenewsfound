@@ -2,18 +2,26 @@ import Parser from 'rss-parser';
 import { createLogger } from '../../utils/logger.js';
 import { pool } from '../../utils/dbCon.js';
 import articlesFetch from './articlesFetch.js';
+import articlesScraper from './articlesScraper.js';
 import dotenv from 'dotenv';
 
 // Load environment variables
 dotenv.config();
 
 const logger = createLogger('rss-reader');
+
+// Configure parser with simple XML parsing
 const parser = new Parser({
     defaultRSS: 2.0,
-    xml2js: {
-        // Handle CDATA properly
-        xmlMode: true,
-        normalize: true
+    customFields: {
+        item: [
+            ['content:encoded', 'contentEncoded'],
+            ['dc:creator', 'dcCreator'],
+            ['category', 'categories']
+        ]
+    },
+    requestOptions: {
+        rejectUnauthorized: false
     }
 });
 
@@ -79,56 +87,28 @@ class RSSReader {
      * @returns {string} Cleaned title
      */
     cleanTitle(title) {
+        if (!title) return 'Untitled';
         return title
             .replace(/<!\[CDATA\[|\]\]>/g, '') // Remove CDATA tags
+            .replace(/&#124;/g, '') // Remove HTML-encoded pipe character
+            .replace(/\|/g, '') // Remove pipe character
             .trim(); // Remove extra whitespace
     }
 
     /**
-     * Sanitize string for use as table name
+     * Sanitize string for table name
      * @param {string} str - String to sanitize
-     * @returns {string} Sanitized string
+     * @returns {string} Sanitized string for table name
      */
     sanitizeTableName(str) {
-        return `articles_${str
+        return str
             .toLowerCase()
-            .replace(/[^a-z0-9]/g, '_') // Replace any non-alphanumeric char with underscore
+            .replace(/\|/g, '') // Remove pipe characters
+            .replace(/&#124;/g, '') // Remove HTML-encoded pipe character
+            .replace(/[^a-z0-9]/g, '_') // Replace other special chars with underscore
             .replace(/_+/g, '_') // Replace multiple underscores with single
             .replace(/^_|_$/g, '') // Remove leading/trailing underscores
-            .trim()}`;
-    }
-
-    /**
-     * Create articles table for a source if it doesn't exist
-     * @param {string} tableName - Name of the table to create
-     */
-    async createArticlesTable(tableName) {
-        const client = await pool.connect();
-        try {
-            await client.query('BEGIN');
-
-            // Create articles table if not exists
-            const createTableQuery = `
-                CREATE TABLE IF NOT EXISTS ${tableName} (
-                    id BIGSERIAL PRIMARY KEY,
-                    url TEXT NOT NULL UNIQUE,
-                    title TEXT NOT NULL,
-                    date_added TIMESTAMP NOT NULL,
-                    scrape_check INTEGER DEFAULT 0,
-                    content TEXT,
-                    summary TEXT
-                )`;
-            
-            await client.query(createTableQuery);
-            await client.query('COMMIT');
-            logger.info(`Created articles table: ${tableName}`);
-        } catch (error) {
-            await client.query('ROLLBACK');
-            logger.error(`Failed to create articles table ${tableName}:`, error);
-            throw error;
-        } finally {
-            client.release();
-        }
+            .trim();
     }
 
     /**
@@ -142,7 +122,7 @@ class RSSReader {
             const feed = await parser.parseURL(feedUrl);
             
             const channelName = this.cleanTitle(feed.title || 'Unknown Channel');
-            const articlesTable = this.sanitizeTableName(channelName);
+            const articlesTable = `articles_${this.sanitizeTableName(channelName)}`;
 
             // Extract source information
             const source = {
@@ -151,15 +131,14 @@ class RSSReader {
                 articles_table: articlesTable
             };
 
-            // Create articles table for this source
-            await this.createArticlesTable(articlesTable);
-
             // Extract articles information
             const articles = feed.items.map(item => ({
                 url: item.link,
                 title: this.cleanTitle(item.title),
-                date_added: new Date(item.pubDate),
-                scrape_check: 0 // Initialize as not scraped
+                date_added: new Date(item.pubDate || item.dcDate),
+                categories: item.categories,
+                contentEncoded: item.contentEncoded,
+                content: item.content || item.description
             }));
 
             logger.info(`Successfully parsed ${articles.length} articles from ${source.channel_name}`);
@@ -179,6 +158,25 @@ class RSSReader {
         try {
             await client.query('BEGIN');
 
+            // Create articles table for this source if it doesn't exist
+            const createArticlesTableQuery = `
+                CREATE TABLE IF NOT EXISTS ${feedData.source.articles_table} (
+                    id BIGSERIAL PRIMARY KEY,
+                    url TEXT NOT NULL UNIQUE,
+                    title TEXT NOT NULL,
+                    date_added TIMESTAMP NOT NULL,
+                    categories TEXT[],
+                    content TEXT,
+                    content_encoded TEXT,
+                    processed BOOLEAN DEFAULT FALSE,
+                    processed_at TIMESTAMP,
+                    error TEXT,
+                    markdown TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )`;
+            await client.query(createArticlesTableQuery);
+
             // Insert or update source
             const sourceQuery = `
                 INSERT INTO sources (url, channel_name, articles_table)
@@ -194,7 +192,7 @@ class RSSReader {
             ]);
 
             await client.query('COMMIT');
-            logger.info(`Source stored successfully: ${feedData.source.channel_name}`);
+            logger.info(`Source and articles table stored successfully: ${feedData.source.channel_name}`);
             
             // Add to processed feeds for articlesFetch
             this.processedFeeds.push(feedData);
@@ -208,7 +206,9 @@ class RSSReader {
     }
 
     /**
-     * Main process to fetch and store RSS feeds
+     * Process RSS feed content
+     * @param {string} url - Article URL
+     * @returns {Promise<string>} Article content
      */
     async processFeedSources() {
         try {
@@ -229,7 +229,12 @@ class RSSReader {
 
             // Initialize and run articlesFetch with processed feeds
             await articlesFetch.initialize(this.processedFeeds.map(feed => feed.source));
-            await articlesFetch.processFeeds(this.processedFeeds);
+            const processedArticles = await articlesFetch.processFeeds(this.processedFeeds);
+
+            // Process articles content if any new/updated articles
+            if (processedArticles.length > 0) {
+                await articlesScraper.processFeeds(processedArticles);
+            }
 
             logger.info('RSS processing completed successfully');
         } catch (error) {

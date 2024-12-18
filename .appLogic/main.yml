@@ -10,14 +10,17 @@ directory_structure:
   src/:
     index.js: "Main worker entry point with 60-min loop"
     backend/:
-    - backend.yml: "Backend logic"
       modules/:
         articles/:
-          - rssReader.js: "RSS feed fetching and processing"
-          - articlesFetch.js: "Article data processing and storage"
+          rssReader.js: "RSS feed fetching and processing"
+          articlesFetch.js: "Article data processing and storage"
+          articlesScraper.js: "Content scraping and processing"
+          scrapers/:
+            trueNorth.js: "True North news scraper implementation"
       utils/:
-        - dbCon.js: "PostgreSQL connection pooling"
-        - logger.js: "Winston logger configuration"
+        dbCon.js: "PostgreSQL connection pooling"
+        logger.js: "Winston logger configuration"
+        ollama.js: "Ollama API integration for content processing"
     frontend/:
       # todo: add frontend
 
@@ -32,5 +35,8 @@ database:
 configuration:
   environment:
     required:
-      - DB_URL: "PostgreSQL database connection string"
-      - DEPLOYMENT_ENV: "development/production"
+      DB_URL: "PostgreSQL database connection string"
+      DEPLOYMENT_ENV: "development/production"
+      OLLAMA_HOST: "Ollama API endpoint URL"
+      OLLAMA_HTML_READER: "Model name for HTML to markdown conversion"
+      OLLAMA_HTML_READER_NUM_CTX: "Context size for HTML processing"

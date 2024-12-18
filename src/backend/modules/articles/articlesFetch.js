@@ -6,6 +6,7 @@ const logger = createLogger('articles-fetch');
 class ArticlesFetch {
     constructor() {
         this.sources = [];
+        this.processedArticles = new Map(); // Track processed articles by table
     }
 
     /**
@@ -15,6 +16,7 @@ class ArticlesFetch {
     async initialize(sources) {
         try {
             this.sources = sources;
+            this.processedArticles.clear();
             logger.info(`Initialized ArticlesFetch with ${sources.length} sources`);
             return true;
         } catch (error) {
@@ -33,23 +35,40 @@ class ArticlesFetch {
         try {
             await client.query('BEGIN');
 
+            // Track articles for this table
+            if (!this.processedArticles.has(source.articles_table)) {
+                this.processedArticles.set(source.articles_table, []);
+            }
+            const tableArticles = this.processedArticles.get(source.articles_table);
+
             // Insert articles into source-specific articles table
             const articleQuery = `
-                INSERT INTO ${source.articles_table} (url, title, date_added, scrape_check)
-                VALUES ($1, $2, $3, $4)
+                INSERT INTO ${source.articles_table} (url, title, date_added)
+                VALUES ($1, $2, $3)
                 ON CONFLICT (url) DO UPDATE
                 SET title = EXCLUDED.title,
-                    date_added = EXCLUDED.date_added,
-                    scrape_check = EXCLUDED.scrape_check
-                RETURNING id`;
+                    date_added = EXCLUDED.date_added
+                RETURNING id, title`;
 
             for (const article of articles) {
                 const result = await client.query(articleQuery, [
                     article.url,
                     article.title,
-                    article.date_added,
-                    0 // Initial scrape_check value
+                    article.date_added
                 ]);
+                
+                // Add to processed articles list
+                if (result.rows[0]) {
+                    tableArticles.push({
+                        id: result.rows[0].id,
+                        url: article.url,
+                        title: result.rows[0].title,
+                        contentEncoded: article.contentEncoded,
+                        content: article.content,
+                        categories: article.categories
+                    });
+                }
+                
                 logger.debug(`Processed article: ${article.title} for ${source.channel_name}`);
             }
 
@@ -65,6 +84,17 @@ class ArticlesFetch {
     }
 
     /**
+     * Get processed articles data
+     * @returns {Array} Array of feed data with processed articles
+     */
+    getProcessedFeeds() {
+        return Array.from(this.processedArticles.entries()).map(([articles_table, articles]) => ({
+            source: { articles_table },
+            articles
+        }));
+    }
+
+    /**
      * Main process to fetch and store articles
      * @param {Array} feedData - Array of feed data objects
      */
@@ -76,8 +106,9 @@ class ArticlesFetch {
                 await this.processArticles(feed.source, feed.articles);
             }
 
+            const processedFeeds = this.getProcessedFeeds();
             logger.info('All feeds processed successfully');
-            return true;
+            return processedFeeds;
         } catch (error) {
             logger.error('Failed to process feeds:', error);
             throw error;
