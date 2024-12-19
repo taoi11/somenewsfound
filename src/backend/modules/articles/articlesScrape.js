@@ -50,7 +50,6 @@ class ArticlesScraper {
                 FROM ${tableName}
                 WHERE content IS NULL
                 ORDER BY date_added DESC
-                LIMIT 5
             `);
             return result.rows;
         } finally {
@@ -122,29 +121,6 @@ class ArticlesScraper {
             
             // Scrape the article
             const htmlContent = await scraper.scrape(article.url, article);
-            
-            // Handle video content
-            if (htmlContent === 'Video Content') {
-                logger.debug(`Video content: ${article.title}`);
-                const client = await pool.connect();
-                try {
-                    await client.query('BEGIN');
-                    await client.query(`
-                        UPDATE ${tableName}
-                        SET content = $1
-                        WHERE id = $2`,
-                        ['Video Content', article.id]
-                    );
-                    await client.query('COMMIT');
-                    logger.debug(`Updated video content: ${article.title}`);
-                } catch (error) {
-                    await client.query('ROLLBACK');
-                    throw error;
-                } finally {
-                    client.release();
-                }
-                return;
-            }
             
             logger.debug(`Got HTML content for ${article.title}, length: ${htmlContent?.length || 0}`);
             

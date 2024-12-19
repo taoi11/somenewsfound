@@ -1,43 +1,43 @@
 modules:
-  rssReader: # Step 1
+  rssReader: # Step 1 - Implemented in rssReader.js
     location: src/backend/modules/articles/rssReader.js
-    event_order:
-      - pull_rss_feed
+    event_order:  # Implemented as specified
+      - pull_rss_feed  # Using rss-parser library
       - parse_rss_feed:
-        - channels:
+        - channels:  # Implemented with source tracking
           - url
           - title
-        - articles:
+        - articles:  # Implemented with additional fields
           - url
           - title
           - pubDate
-          - content:encoded: # RSS feed may contain full article content
+          - content:encoded:  # RSS feed content handling
             - CDATA HTML content
             - images
             - embedded media
-      - store_feeds
-      - create_articles_table
+      - store_feeds  # Implemented with PostgreSQL
+      - create_articles_table  # Dynamic table creation per source
     triggers:
-      - articles_fetch: 
+      - articles_fetch:  # Triggers articlesFetch module
         with:
-          - articles_table:
+          - articles_table:  # Passes table info
             - url
             - title
             - pubDate
-  articlesFetch: # Step 2
+  articlesFetch: # Step 2 - Implemented in articlesFetch.js
     location: src/backend/modules/articles/articlesFetch.js
     implementation:
-      features:
+      features:  # All implemented as specified
         - Source-specific table handling
         - Bulk article processing
         - Transaction per source
         - Error handling per source
       database:
-        operations:
+        operations:  # Implemented with pg pool
           - UPSERT articles using url as key
           - Transaction management
           - Connection pooling
-    tasks:
+    tasks:  # Implemented as specified
       - pull articles from Sources
       - store articles:
         - url
@@ -50,20 +50,20 @@ modules:
         - else:
           - queue for scraping
     triggers:
-      - scrape_articles:
+      - scrape_articles:  # Triggers articlesScrape module
         with:
           - articles_table:
             - url
             - row_id
-  articlesScrape: # Step 3
+  articlesScrape: # Step 3 - Implemented in articlesScrape.js
     location: src/backend/modules/articles/articlesScrape.js
     scrapers:
-      trueNorth:
+      trueNorth:  # Implemented in trueNorth.js
         features:
-          - Video/Podcast detection
+          - Video/Podcast detection  # Partially implemented
           - Content:encoded extraction
           - Raw content fallback
-      cbc:
+      cbc:  # Implemented in cbc.js
         features:
           - Custom user agent
           - URL cleaning
@@ -78,19 +78,12 @@ modules:
     content_processing:
       ollama:
         endpoint: /api/chat
-        model: reader-lm:1.5b-fp16
-        context_size: 65536
-        fallback: "Store original HTML if conversion fails"
-    retention:
+    retention:  # Not yet implemented
       articles_days: 30
       events_days: 90
-    optimization:
-      skip_conditions:
-        - content already present
-        - video/podcast content
 
 utils:
-  logger:
+  logger:  # Implemented in logger.js
     location: src/backend/utils/logger.js
     implementation: winston
     features:
@@ -102,7 +95,7 @@ utils:
           debug: "Detailed progress tracking"
       - Module-specific loggers
   
-  database:
+  database:  # Implemented in dbCon.js
     location: src/backend/utils/dbCon.js
     implementation: pg
     features:
@@ -110,7 +103,7 @@ utils:
       - Transaction support
       - Parameterized queries
   
-  ollama:
+  ollama:  # Implemented in ollama.js
     location: src/backend/utils/ollama.js
     implementation: direct-api
     features:
